@@ -28,15 +28,18 @@ label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:1
 #receiptPreview{width:100%;max-height:220px;object-fit:contain;border-radius:12px;background:#f3f4f6;margin-top:10px;display:none}
 .ocrStatus{font-size:13px;color:#6b7280;margin-top:10px;min-height:20px}
 .hint{font-size:12px;color:#9ca3af;line-height:1.5;margin-top:10px}
-</style>
+#tomorrowAlert{color:#d00;font-weight:700;font-size:14px;min-height:20px;margin-top:4px}.nextNotice{font-size:14px;font-weight:700;margin-top:10px;line-height:1.5}</style>
 </head>
 <body>
 <div class="app">
-<header><h1>今日いくら？</h1><button class="icon" onclick="settings.showModal()">⚙️</button></header>
+<header><h1>今日いくら？</h1><button class="icon" onclick="openSettings()">⚙️</button></header>
 <div id="date" class="date"></div>
 <div class="hero">
  <div class="label">今日使える金額</div>
  <div id="today" class="amount">¥0</div>
+  <div id="tomorrowAlert"></div>
+ <div id="nextAllowanceNotice" class="nextNotice"></div>
+ <div id="tomorrowAmount" class="remainToday"></div>
  <div id="remainToday" class="remainToday"></div>
 </div>
 <div class="stats">
@@ -54,8 +57,16 @@ label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:1
 
 <dialog id="settings">
 <h2>設定</h2>
-<label>月のお小遣い</label><input id="allowance" type="number" min="0" step="100" inputmode="numeric">
+<div id="currentAllowanceLabel" class="hint"></div>
+<label>次回のお小遣い</label><input id="allowance" type="number" min="0" step="100" inputmode="numeric">
 <label>毎月の支給日（1〜28日）</label><input id="startDay" type="number" min="1" max="28" inputmode="numeric">
+<label>月末の残金</label>
+<select id="carryover" style="width:100%;padding:13px;border:1px solid #ddd;border-radius:12px;font-size:17px">
+ <option value="carry">翌月へ繰り越す</option>
+ <option value="save">貯金する</option>
+ <option value="reset">リセットする</option>
+</select>
+<div class="hint">翌月分のお小遣いは、月末にここで設定できます。すでに次回分を登録している場合は、その金額を表示します。</div>
 <div class="btns"><button onclick="settings.close()">キャンセル</button><button class="primary" onclick="saveSettings()">保存</button></div>
 </dialog>
 
@@ -97,95 +108,196 @@ let data=JSON.parse(localStorage.getItem(KEY)||"null");
 if(!data){
   const old=JSON.parse(localStorage.getItem("todayikura_v2")||"null");
   data=old||{allowance:25000,startDay:1,logs:[]};
-  data.logs=(data.logs||[]).map(x=>({type:x.type||"expense",amount:Number(x.amount)||0,date:x.date}));
 }
 data.allowance=Number(data.allowance)||25000;
-data.startDay=Number(data.startDay)||1;
-data.logs=data.logs||[];
+data.startDay=Math.min(28,Math.max(1,Number(data.startDay)||1));
+data.logs=(data.logs||[]).map(x=>({type:x.type||"expense",amount:Number(x.amount)||0,date:x.date}));
+data.allowanceByCycle=data.allowanceByCycle||{};
+data.carryoverMode=data.carryoverMode||"carry";
 
 const yen=n=>"¥"+Math.max(0,Math.round(n)).toLocaleString("ja-JP");
+const yenToday=n=>(n<0?"−":"")+"¥"+Math.abs(Math.round(n)).toLocaleString("ja-JP");
 const dayMs=86400000;
 function save(){localStorage.setItem(KEY,JSON.stringify(data))}
 function startOfCycle(d=new Date()){
- let y=d.getFullYear(),m=d.getMonth();
- if(d.getDate()<data.startDay)m--;
- return new Date(y,m,data.startDay,0,0,0,0);
+  let y=d.getFullYear(),m=d.getMonth();
+  if(d.getDate()<data.startDay)m--;
+  return new Date(y,m,data.startDay,0,0,0,0);
 }
 function endOfCycle(s){return new Date(s.getFullYear(),s.getMonth()+1,data.startDay,0,0,0,0)}
-function logsIn(s,e){return data.logs.filter(x=>{let d=new Date(x.date);return d>=s&&d<e})}
+function cycleKey(s){return `${s.getFullYear()}-${String(s.getMonth()+1).padStart(2,"0")}-${String(s.getDate()).padStart(2,"0")}`}
+function logsIn(s,e){return data.logs.filter(x=>{const d=new Date(x.date);return d>=s&&d<e})}
+function baseAllowanceFor(s){
+  const key=cycleKey(s);
+  if(Number.isFinite(Number(data.allowanceByCycle[key]))) return Number(data.allowanceByCycle[key]);
+  return Number(data.allowance)||25000;
+}
+function previousCycleRemaining(s){
+  const prev=new Date(s.getFullYear(),s.getMonth()-1,data.startDay,0,0,0,0);
+  const logs=logsIn(prev,s);
+  const spent=logs.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount||0),0);
+  const income=logs.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
+  return Math.max(0,baseAllowanceFor(prev)+income-spent);
+}
+function nextCycleStart(s){return new Date(s.getFullYear(),s.getMonth()+1,data.startDay,0,0,0,0)}
+function getCycleAllowance(s){
+  let base=baseAllowanceFor(s);
+  if(data.carryoverMode==="carry") base+=previousCycleRemaining(s);
+  return base;
+}
+function getNextCycleBase(s){return baseAllowanceFor(nextCycleStart(s))}
+
 function calc(){
- const now=new Date(), s=startOfCycle(now), e=endOfCycle(s);
- const logs=logsIn(s,e);
- const spent=logs.filter(x=>x.type==="expense").reduce((a,x)=>a+x.amount,0);
- const income=logs.filter(x=>x.type==="income").reduce((a,x)=>a+x.amount,0);
- const remain=Math.max(0,data.allowance+income-spent);
- const todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());
- const todayLogs=logs.filter(x=>new Date(x.date)>=todayStart&&new Date(x.date)<new Date(todayStart.getTime()+dayMs));
- const todaySpent=todayLogs.filter(x=>x.type==="expense").reduce((a,x)=>a+x.amount,0);
- const daysLeft=Math.max(1,Math.ceil((e-now)/dayMs));
- const daily=Math.floor(remain/daysLeft);
- const available=Math.max(0,daily);
- document.getElementById("date").textContent=now.toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
- document.getElementById("today").textContent=yen(available);
- document.getElementById("remainToday").textContent=`今日すでに ${yen(todaySpent)} 使用`;
- document.getElementById("remain").textContent=yen(remain);
- document.getElementById("spent").textContent=yen(spent);
- document.getElementById("carry").textContent=`支給期間の残り ${daysLeft}日`;
- const h=document.getElementById("history");
- h.innerHTML=todayLogs.length?todayLogs.slice().reverse().map(x=>{
-   const isIncome=x.type==="income";
-   return `<div class="row"><span>${new Date(x.date).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})} ${isIncome?"臨時収入":"支出"}</span><strong>${isIncome?"+":"−"} ${yen(x.amount)}</strong></div>`;
- }).join(""):'<div class="empty">今日はまだ記録がありません</div>';
+  const now=new Date(), s=startOfCycle(now), e=endOfCycle(s);
+  const logs=logsIn(s,e);
+  const spent=logs.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount||0),0);
+  const income=logs.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
+  const cycleAllowance=getCycleAllowance(s);
+  const remain=Math.max(0,cycleAllowance+income-spent);
+
+  const todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const todayEnd=new Date(now.getFullYear(),now.getMonth(),now.getDate()+1);
+  const todayLogs=logs.filter(x=>{const d=new Date(x.date);return d>=todayStart&&d<todayEnd});
+  const todaySpent=todayLogs.filter(x=>x.type==="expense").reduce((a,x)=>a+Number(x.amount||0),0);
+  const todayIncome=todayLogs.filter(x=>x.type==="income").reduce((a,x)=>a+Number(x.amount||0),0);
+
+  // 「今日の予算」は日付が変わるまで固定。今日の支出だけ表示額から即時控除する。
+  const daysLeft=Math.max(1,Math.round((e-todayStart)/dayMs));
+  const dateKey=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,"0")}-${String(now.getDate()).padStart(2,"0")}`;
+  let daily;
+  if(data.dailyBudgetDate!==dateKey || !Number.isFinite(Number(data.dailyBudget))){
+    daily=Math.floor(remain/daysLeft);
+    data.dailyBudget=daily;
+    data.dailyBudgetDate=dateKey;
+    save();
+  }else{
+    daily=Number(data.dailyBudget);
+  }
+
+  const todayRemaining=daily-todaySpent+todayIncome;
+  const tomorrowRemain=Math.max(0,remain);
+  const tomorrowDays=Math.max(1,daysLeft-1);
+  const tomorrowDaily=Math.floor(tomorrowRemain/tomorrowDays);
+
+  const alertEl=document.getElementById("tomorrowAlert");
+  if(todayRemaining<0){
+    const nextRemain=Math.max(0,remain);
+    const nextDays=Math.max(1,daysLeft-1);
+    const nextDaily=Math.floor(nextRemain/nextDays);
+    alertEl.textContent=`使いすぎです。明日以降は1日 ${nextDaily.toLocaleString("ja-JP")}円 になります。`;
+  }else alertEl.textContent="";
+
+  document.getElementById("date").textContent=now.toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"});
+  document.getElementById("today").textContent=yenToday(todayRemaining);
+  document.getElementById("tomorrowAmount").textContent=`明日は ${yen(tomorrowDaily)} 使える予定`;
+  const notice=document.getElementById("nextAllowanceNotice");
+  if(notice && !isCycleEnd()) notice.textContent="";
+  document.getElementById("remainToday").textContent=`今日すでに ${yen(todaySpent)} 使用`;
+  document.getElementById("remain").textContent=yen(remain);
+  document.getElementById("spent").textContent=yen(spent);
+  document.getElementById("carry").textContent=`支給期間の残り ${daysLeft}日`;
+
+  const h=document.getElementById("history");
+  h.innerHTML=todayLogs.length?todayLogs.slice().reverse().map(x=>{
+    const isIncome=x.type==="income";
+    return `<div class="row"><span>${new Date(x.date).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"})} ${isIncome?"臨時収入":"支出"}</span><strong>${isIncome?"+":"−"} ${yen(x.amount)}</strong></div>`;
+  }).join(""):"<div class=\"empty\">今日はまだ記録がありません</div>";
 }
 function addExpense(amount){amount=Number(amount);if(!(amount>0))return;data.logs.push({type:"expense",amount,date:new Date().toISOString()});save();calc()}
 function addIncome(amount){amount=Number(amount);if(!(amount>0))return;data.logs.push({type:"income",amount,date:new Date().toISOString()});save();calc()}
 function saveExpense(){const a=Number(document.getElementById("expenseAmount").value);if(a>0){addExpense(a);document.getElementById("expenseAmount").value="";expense.close()}}
 function saveCustom(){const a=Number(document.getElementById("customAmount").value);if(a>0){addExpense(a);document.getElementById("customAmount").value="";custom.close()}}
 function saveIncome(){const a=Number(document.getElementById("incomeAmount").value);if(a>0){addIncome(a);document.getElementById("incomeAmount").value="";income.close()}}
+
 function saveSettings(){
- data.allowance=Math.max(0,Number(document.getElementById("allowance").value)||0);
- data.startDay=Math.min(28,Math.max(1,Number(document.getElementById("startDay").value)||1));
- save();settings.close();calc();
+  const amount=Math.max(0,Number(document.getElementById("allowance").value)||0);
+  const newStart=Math.min(28,Math.max(1,Number(document.getElementById("startDay").value)||1));
+  const current=startOfCycle(new Date());
+  const next=nextCycleStart(current);
+  const nextKey=cycleKey(next);
+  data.allowanceByCycle[nextKey]=amount;
+  data.allowance=amount;
+  data.startDay=newStart;
+  data.carryoverMode=document.getElementById("carryover").value;
+  save();
+  settings.close();
+  calc();
 }
+function isCycleEnd(){
+  const now=new Date();
+  const current=startOfCycle(now);
+  const end=endOfCycle(current);
+  const cycleEndDay=new Date(end.getTime()-dayMs);
+  return now.getFullYear()===cycleEndDay.getFullYear() && now.getMonth()===cycleEndDay.getMonth() && now.getDate()===cycleEndDay.getDate();
+}
+function promptNextAllowanceIfNeeded(){
+  const notice=document.getElementById("nextAllowanceNotice");
+  const current=startOfCycle(new Date());
+  const next=nextCycleStart(current);
+  const key=cycleKey(next);
+  const registered=Number.isFinite(Number(data.allowanceByCycle[key]));
+  if(registered){
+    if(notice && isCycleEnd()) notice.textContent=`次回のお小遣い：${yen(data.allowanceByCycle[key])}（${next.getMonth()+1}月${next.getDate()}日〜）`;
+    return;
+  }
+  if(notice && isCycleEnd()) notice.textContent=`${next.getMonth()+1}月のお小遣いを設定してください`;
+  if(!isCycleEnd()) return;
+  const answer=window.prompt(`${next.getMonth()+1}月のお小遣いを設定してください。\n\n金額（円）`,String(data.allowance||25000));
+  if(answer===null)return;
+  const amount=Math.max(0,Number(answer)||0);
+  data.allowanceByCycle[key]=amount;
+  data.allowance=amount;
+  save();
+  if(notice) notice.textContent=`次回のお小遣い：${yen(amount)}（${next.getMonth()+1}月${next.getDate()}日〜）`;
+}
+function openSettings(){
+  const current=startOfCycle(new Date());
+  const next=nextCycleStart(current);
+  const key=cycleKey(next);
+  document.getElementById("allowance").value=Number.isFinite(Number(data.allowanceByCycle[key]))?data.allowanceByCycle[key]:(data.allowance||25000);
+  document.getElementById("startDay").value=data.startDay;
+  document.getElementById("carryover").value=data.carryoverMode||"carry";
+  document.getElementById("currentAllowanceLabel").textContent=`現在のお小遣い：${yen(getCycleAllowance(current))} ／ 次回：${next.getMonth()+1}月${next.getDate()}日分`;
+  settings.showModal();
+}
+
 const receiptFile=document.getElementById("receiptFile");
 receiptFile.addEventListener("change",async()=>{
- const file=receiptFile.files&&receiptFile.files[0]; if(!file)return;
- const preview=document.getElementById("receiptPreview"),status=document.getElementById("ocrStatus");
- preview.src=URL.createObjectURL(file);preview.style.display="block";
- status.textContent="レシートを読み取っています…";
- document.getElementById("receiptAmount").value="";
- try{
-   const result=await Tesseract.recognize(file,"jpn+eng",{logger:m=>{
-     if(m.status==="recognizing text"&&m.progress)status.textContent=`レシートを読み取り中… ${Math.round(m.progress*100)}%`;
-   }});
-   const text=result.data.text||"";
-   const amount=extractReceiptTotal(text);
-   if(amount){
-     document.getElementById("receiptAmount").value=amount;
-     status.textContent=`合計 ${yen(amount)} を読み取りました。金額を確認して登録してください。`;
-   }else{
-     status.textContent="合計金額を自動判定できませんでした。金額を入力してください。";
-   }
- }catch(e){
-   console.error(e);status.textContent="読み取りに失敗しました。金額を手入力してください。";
- }
+  const file=receiptFile.files&&receiptFile.files[0];if(!file)return;
+  const preview=document.getElementById("receiptPreview"),status=document.getElementById("ocrStatus");
+  preview.src=URL.createObjectURL(file);preview.style.display="block";
+  status.textContent="レシートを読み取っています…";
+  document.getElementById("receiptAmount").value="";
+  try{
+    const result=await Tesseract.recognize(file,"jpn+eng",{logger:m=>{
+      if(m.status==="recognizing text"&&m.progress)status.textContent=`レシートを読み取り中… ${Math.round(m.progress*100)}%`;
+    }});
+    const text=result.data.text||"";
+    const amount=extractReceiptTotal(text);
+    if(amount){
+      document.getElementById("receiptAmount").value=amount;
+      status.textContent=`合計 ${yen(amount)} を読み取りました。金額を確認して登録してください。`;
+    }else status.textContent="合計金額を自動判定できませんでした。金額を入力してください。";
+  }catch(e){console.error(e);status.textContent="読み取りに失敗しました。金額を手入力してください。";}
 });
 function extractReceiptTotal(text){
- const normalized=text.replace(/[¥￥]/g,"円").replace(/[,\s]/g,"");
- const patterns=[
-   /(?:合計|総合計|お買上(?:げ|げ)?合計|お会計|お支払(?:い|額)?|支払額|今回のお支払額)[^0-9]{0,20}([0-9]{1,7})円?/i,
-   /(?:total|grandtotal|amountpaid)[^0-9]{0,20}([0-9]{1,7})/i
- ];
- for(const p of patterns){const m=normalized.match(p);if(m)return Number(m[1]);}
- const nums=[...normalized.matchAll(/([0-9]{1,7})円/g)].map(m=>Number(m[1])).filter(n=>n>0);
- return nums.length?Math.max(...nums):null;
+  const normalized=text.replace(/[¥￥]/g,"円").replace(/[,\s]/g,"");
+  const patterns=[
+    /(?:合計|総合計|お買上(?:げ|げ)?合計|お会計|お支払(?:い|額)?|支払額|今回のお支払額)[^0-9]{0,20}([0-9]{1,7})円?/i,
+    /(?:total|grandtotal|amountpaid)[^0-9]{0,20}([0-9]{1,7})/i
+  ];
+  for(const p of patterns){const m=normalized.match(p);if(m)return Number(m[1]);}
+  const nums=[...normalized.matchAll(/([0-9]{1,7})円/g)].map(m=>Number(m[1])).filter(n=>n>0);
+  return nums.length?Math.max(...nums):null;
 }
 function saveReceipt(){
- const a=Number(document.getElementById("receiptAmount").value);
- if(a>0){addExpense(a);document.getElementById("receiptFile").value="";document.getElementById("receiptPreview").style.display="none";document.getElementById("ocrStatus").textContent="";receipt.close()}
+  const a=Number(document.getElementById("receiptAmount").value);
+  if(a>0){addExpense(a);document.getElementById("receiptFile").value="";document.getElementById("receiptPreview").style.display="none";document.getElementById("ocrStatus").textContent="";receipt.close()}
 }
-document.getElementById("allowance").value=data.allowance;
+
 document.getElementById("startDay").value=data.startDay;
+document.getElementById("carryover").value=data.carryoverMode||"carry";
 calc();
+promptNextAllowanceIfNeeded();
 </script>
 </body></html>

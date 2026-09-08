@@ -68,13 +68,6 @@ label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:1
 </select>
 <div class="hint">翌月分のお小遣いは、月末にここで設定できます。すでに次回分を登録している場合は、その金額を表示します。</div>
 <div class="btns"><button onclick="settings.close()">キャンセル</button><button class="primary" onclick="saveSettings()">保存</button></div>
-<div class="btns"><button class="danger" style="width:100%;" onclick="resetConfirm.showModal()">⚠️ データをリセット</button></div>
-</dialog>
-
-<dialog id="resetConfirm">
-<h2>リセットしてもよろしいですか？</h2>
-<div class="hint">支出・臨時収入・月ごとのお小遣い設定・繰り越し情報など、このアプリに保存されているデータをすべて削除して初期状態に戻します。</div>
-<div class="btns"><button class="secondary" onclick="resetConfirm.close()">キャンセル</button><button class="danger" onclick="resetAllData()">リセットする</button></div>
 </dialog>
 
 <dialog id="expense">
@@ -120,37 +113,7 @@ data.allowance=Number(data.allowance)||25000;
 data.startDay=Math.min(28,Math.max(1,Number(data.startDay)||1));
 data.logs=(data.logs||[]).map(x=>({type:x.type||"expense",amount:Number(x.amount)||0,date:x.date}));
 data.allowanceByCycle=data.allowanceByCycle||{};
-data.openingBalanceByCycle=data.openingBalanceByCycle||{};
 data.carryoverMode=data.carryoverMode||"carry";
-
-// v12 初回セットアップ：現在の月の残りを17,664円、今日の履歴を空にし、
-// 次回のお小遣いを39,000円に設定する。以後は再実行しない。
-// 「今月の残り」と「次回のお小遣い」を完全に分離して管理する。
-const V12_SETUP_KEY="todayikura_v12_setup_done";
-if(!localStorage.getItem(V12_SETUP_KEY)){
-  const now0=new Date();
-  const today0=new Date(now0.getFullYear(),now0.getMonth(),now0.getDate());
-  const tomorrow0=new Date(today0.getTime()+86400000);
-  // 今日の履歴だけ削除
-  data.logs=(data.logs||[]).filter(x=>{const d=new Date(x.date);return !(d>=today0&&d<tomorrow0)});
-
-  const start0=(d=>{let y=d.getFullYear(),m=d.getMonth();if(d.getDate()<data.startDay)m--;return new Date(y,m,data.startDay,0,0,0,0)})(now0);
-  const end0=new Date(start0.getFullYear(),start0.getMonth()+1,data.startDay,0,0,0,0);
-  const currentKey0=`${start0.getFullYear()}-${String(start0.getMonth()+1).padStart(2,"0")}-${String(start0.getDate()).padStart(2,"0")}`;
-  const next0=new Date(start0.getFullYear(),start0.getMonth()+1,data.startDay,0,0,0,0);
-  const nextKey0=`${next0.getFullYear()}-${String(next0.getMonth()+1).padStart(2,"0")}-${String(next0.getDate()).padStart(2,"0")}`;
-
-  // 現在のサイクルは「開始残高」を17,664円に固定。
-  // 次回分39,000円は現在の残高計算には一切加えない。
-  data.openingBalanceByCycle[currentKey0]=17664;
-  data.allowanceByCycle[nextKey0]=39000;
-
-  // 今日の予算キャッシュは現在の残高から再計算
-  data.dailyBudget=null;
-  data.dailyBudgetDate=null;
-  localStorage.setItem(V12_SETUP_KEY,"1");
-  save();
-}
 
 const yen=n=>"¥"+Math.max(0,Math.round(n)).toLocaleString("ja-JP");
 const yenToday=n=>(n<0?"−":"")+"¥"+Math.abs(Math.round(n)).toLocaleString("ja-JP");
@@ -178,8 +141,6 @@ function previousCycleRemaining(s){
 }
 function nextCycleStart(s){return new Date(s.getFullYear(),s.getMonth()+1,data.startDay,0,0,0,0)}
 function getCycleAllowance(s){
-  const key=cycleKey(s);
-  if(Number.isFinite(Number(data.openingBalanceByCycle[key]))) return Number(data.openingBalanceByCycle[key]);
   let base=baseAllowanceFor(s);
   if(data.carryoverMode==="carry") base+=previousCycleRemaining(s);
   return base;
@@ -289,18 +250,13 @@ function promptNextAllowanceIfNeeded(){
 }
 function openSettings(){
   const current=startOfCycle(new Date());
-}
-
-function resetAllData(){
-  localStorage.removeItem(KEY);
-  localStorage.removeItem("todayikura_v2");
-  localStorage.removeItem("todayikura_v12_setup_done");
-  data={allowance:25000,startDay:1,logs:[],allowanceByCycle:{},openingBalanceByCycle:{},carryoverMode:"carry"};
-  save();
-  resetConfirm.close();
-  settings.close();
-  calc();
-  promptNextAllowanceIfNeeded();
+  const next=nextCycleStart(current);
+  const key=cycleKey(next);
+  document.getElementById("allowance").value=Number.isFinite(Number(data.allowanceByCycle[key]))?data.allowanceByCycle[key]:(data.allowance||25000);
+  document.getElementById("startDay").value=data.startDay;
+  document.getElementById("carryover").value=data.carryoverMode||"carry";
+  document.getElementById("currentAllowanceLabel").textContent=`現在のお小遣い：${yen(getCycleAllowance(current))} ／ 次回：${next.getMonth()+1}月${next.getDate()}日分`;
+  settings.showModal();
 }
 
 const receiptFile=document.getElementById("receiptFile");

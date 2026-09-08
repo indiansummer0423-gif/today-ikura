@@ -22,7 +22,6 @@ button{font:inherit}.icon{border:0;background:#fff;border-radius:14px;padding:10
 section{margin-top:22px}h2{font-size:16px;margin:0 0 9px}.box{background:#fff;border-radius:18px;overflow:hidden}.row{display:flex;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #eee}.row:last-child{border:0}.empty{text-align:center;color:#9ca3af;padding:22px}
 .note{text-align:center;color:#9ca3af;font-size:12px;margin-top:18px}
 dialog{border:0;border-radius:22px;width:min(92%,420px);padding:22px;box-shadow:0 20px 60px #0004}dialog::backdrop{background:#0007}
-.resetArea{margin-top:22px;padding-top:18px;border-top:1px solid #eee}.resetTitle{font-size:13px;color:#6b7280;margin-bottom:8px}.resetButton{width:100%;padding:14px;border:0;border-radius:12px;background:#fee2e2;color:#b91c1c;font-weight:700;font-size:16px}
 label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:100%;padding:13px;border:1px solid #ddd;border-radius:12px;font-size:17px}
 .btns{display:flex;gap:10px;margin-top:20px}.btns button{flex:1;padding:13px;border:0;border-radius:12px}.primary{background:#111827;color:#fff}
 .secondary{background:#e5e7eb}.danger{color:#b91c1c;background:#fee2e2}
@@ -69,10 +68,7 @@ label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:1
 </select>
 <div class="hint">翌月分のお小遣いは、月末にここで設定できます。すでに次回分を登録している場合は、その金額を表示します。</div>
 <div class="btns"><button onclick="settings.close()">キャンセル</button><button class="primary" onclick="saveSettings()">保存</button></div>
-<div class="resetArea">
- <div class="resetTitle">危険な操作</div>
- <button type="button" class="resetButton" onclick="resetConfirm.showModal()">⚠️ データをリセット</button>
-</div>
+<div class="btns"><button class="danger" style="width:100%;" onclick="resetConfirm.showModal()">⚠️ データをリセット</button></div>
 </dialog>
 
 <dialog id="resetConfirm">
@@ -114,7 +110,6 @@ label{display:block;color:#6b7280;font-size:13px;margin:14px 0 6px}input{width:1
 
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 <script>
-// 今日いくら？ v14
 const KEY="todayikura_v3";
 let data=JSON.parse(localStorage.getItem(KEY)||"null");
 if(!data){

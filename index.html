@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f3f4f6">
+<title>今日いくら？</title>
+<style>
+:root{--navy:#111827;--blue:#0785f5;--bg:#f3f4f6;--muted:#8f99a8}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+html,body{margin:0;width:100%;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--navy);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+.app{width:100%;max-width:760px;height:100dvh;margin:0 auto;padding:10px 14px 10px;display:flex;flex-direction:column;gap:8px;overflow:hidden}
+.header{height:43px;flex:0 0 43px;display:flex;justify-content:space-between;align-items:center}
+h1{font-size:25px;line-height:1;font-weight:800;letter-spacing:-1px;margin:0}
+.icon{width:43px;height:43px;border:0;border-radius:15px;background:#fff;font-size:22px;box-shadow:0 2px 7px #00000008}
+.date{height:25px;flex:0 0 25px;text-align:center;color:#6d7787;font-size:16px;margin:0}
+.hero{background:var(--navy);border-radius:27px;padding:25px 12px 19px;text-align:center;box-shadow:0 12px 26px #1118271c;flex:0 0 226px;min-height:0}
+.heroLabel{color:#d1d5db;font-size:17px;margin-bottom:7px}
+.today{font-size:58px;line-height:1;font-weight:800;letter-spacing:-3px;color:#fff;white-space:nowrap}
+.alert{margin:12px auto 0;color:#ff1717;font-size:16px;font-weight:800;line-height:1.25;max-width:680px}
+.tomorrow,.usedToday{color:#d1d5db;font-size:16px;line-height:1.35;margin-top:10px}
+.notice{color:#d1d5db;font-size:12px;margin-top:5px;display:none}
+.stats{height:76px;flex:0 0 76px;margin-bottom:8px;display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.stat{background:#fff;border-radius:21px;padding:10px 17px;box-shadow:0 2px 8px #00000008;display:flex;flex-direction:column;justify-content:center}
+.stat span{display:block;color:#70798a;font-size:14px;margin-bottom:2px}
+.stat b{font-size:25px;letter-spacing:-1px;line-height:1.05}
+.breakdown{font-size:13px;line-height:1.35;margin-top:4px;white-space:nowrap}
+.actions{height:90px;flex:0 0 90px;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:40px 40px;gap:10px 10px}
+.action{height:43px;border:0;border-radius:16px;background:#fff;color:var(--blue);font-size:17px;font-weight:700;box-shadow:0 2px 8px #00000008}
+.action.income{background:#edf2ff}
+.action.full{grid-column:1/-1;background:#e5e7eb}
+#receiptFile{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.historyTitle{height:24px;flex:0 0 24px;font-size:19px;font-weight:800;margin:0}
+.history{height:105px;flex:0 0 105px;background:#fff;border-radius:20px;overflow:hidden;box-shadow:0 2px 8px #00000008}
+.row{height:35px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;border-bottom:1px solid #e5e7eb;font-size:15px}
+.row:last-child{border-bottom:0}.expense{font-weight:700}.incomeRow{font-weight:700;color:#147a37}
+.empty{padding:12px 18px;color:#8b95a5;font-size:14px}
+.period{text-align:center;color:#a0a9b8;font-size:14px;height:18px;flex:0 0 18px;margin:0}
+dialog{border:0;border-radius:24px;width:min(92%,500px);padding:0;box-shadow:0 16px 60px #0005;max-height:90dvh;overflow:auto}
+dialog::backdrop{background:#0008}
+.modal{padding:24px;font-size:16px}
+.modal h2{font-size:22px;margin:0 0 18px}
+.modal p{color:#667085;line-height:1.6}
+.field{margin:15px 0}
+.field label{display:block;color:#667085;font-size:13px;margin-bottom:7px}
+.field input,.field select{width:100%;padding:12px;border:1px solid #d0d5dd;border-radius:13px;background:#fff;font-size:16px;line-height:1.25;-webkit-text-size-adjust:100%}
+.modalButtons{display:flex;gap:9px;margin-top:20px}
+.modalButtons button{flex:1;padding:12px;border:0;border-radius:13px;font-size:16px;line-height:1.25;-webkit-text-size-adjust:100%}
+.primary{background:var(--blue);color:#fff}.danger{background:#d00;color:#fff}
+.resetArea{border-top:1px solid #e5e7eb;margin-top:22px;padding-top:18px}
+.resetTitle{font-size:12px;color:#98a2b3;margin-bottom:8px}
+.resetButton{width:100%;padding:11px;border:1px solid #d00;color:#d00;background:#fff;border-radius:13px;font-size:16px}
+.quick{display:flex;gap:7px;margin-top:8px}
+.quick button{flex:1;padding:9px;border:1px solid #ddd;background:#fff;border-radius:11px;font-size:16px;line-height:1.25}
+.methodGrid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.methodBtn{padding:11px;border:1px solid #d0d5dd;border-radius:13px;background:#fff;font-size:16px;font-weight:700}
+.methodBtn.active{border:2px solid var(--blue);padding:10px;color:var(--blue);background:#edf5ff}
+.totalPreview{font-size:13px;color:#667085;margin-top:6px}
+.preview{width:100%;max-height:230px;object-fit:contain;border-radius:15px;background:#f2f4f7;margin-top:8px;display:none}
+.ocrStatus{font-size:13px;color:#667085;line-height:1.5;margin-top:9px}
+@media(max-height:760px){
+ .app{padding-top:max(30px,calc(env(safe-area-inset-top) + 10px));padding-bottom:6px;gap:5px}
+ .hero{flex-basis:198px;padding-top:19px;padding-bottom:14px}
+ .today{font-size:51px}.alert{margin-top:8px;font-size:14px}.tomorrow,.usedToday{font-size:14px;margin-top:7px}
+ .stats{flex-basis:68px;height:68px}.stat{padding:7px 15px}.stat b{font-size:23px}.breakdown{font-size:12px;margin-top:3px}
+ .actions{flex-basis:90px;height:90px;grid-template-rows:40px 40px;gap:10px}.action{height:40px;font-size:16px}
+ .historyTitle{font-size:18px}.history{height:90px;flex-basis:90px}.row{height:30px;font-size:14px}.period{font-size:13px}
+}
+@media(min-width:600px){
+ .app{padding-left:24px;padding-right:24px}.hero{flex-basis:240px}.today{font-size:66px}
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header"><h1>今日いくら？</h1><button class="icon" id="settingsBtn" aria-label="設定">⚙️</button></div>
+  <div class="date" id="todayDate"></div>
+
+  <section class="hero">
+    <div class="heroLabel">今日使える金額</div>
+    <div class="today" id="today">¥0</div>
+    <div class="alert" id="alert"></div>
+    <div class="tomorrow" id="tomorrow"></div>
+    <div class="usedToday" id="usedToday"></div>
+    <div class="notice" id="notice"></div>
+  </section>
+
+  <section class="stats">
+    <div class="stat">
+      <span>今月の残り</span>
+      <b id="remain">¥0</b>
+      <div class="breakdown" id="remainBreakdown">財布 ¥0　PayPay ¥0</div>
+    </div>
+    <div class="stat">
+      <span>今月の使用額</span>
+      <b id="spent">¥0</b>
+      <div class="breakdown" id="spentBreakdown">財布 ¥0　PayPay ¥0</div>
+    </div>
+  </section>
+
+  <section class="actions">
+    <button class="action" id="expenseBtn">− 支出</button>
+    <button class="action income" id="incomeBtn">＋ 臨時収入</button>
+    <label class="action full" for="receiptFile" style="display:flex;align-items:center;justify-content:center;cursor:pointer">🧾 レシート（カメラ）</label>
+    <input id="receiptFile" type="file" accept="image/*" capture="environment">
+  </section>
+
+  <h2 class="historyTitle">今日の履歴</h2>
+  <div class="history" id="history"></div>
+  <div class="period" id="period"></div>
+</div>
+
+<dialog id="settingsDialog"><div class="modal">
+  <h2>設定</h2>
+  <div class="field">
+    <label>次回のお小遣い</label>
+    <input id="nextAllowanceTotal" type="number" min="0" step="100" placeholder="合計金額">
+    <div class="totalPreview" id="nextAllowancePreview">財布 ¥0　PayPay ¥0</div>
+  </div>
+  <div class="field">
+    <label>次回のお小遣いの振り分け</label>
+    <div class="methodGrid">
+      <div><label>財布</label><input id="nextWallet" type="number" min="0" step="100" inputmode="numeric" placeholder="0"></div>
+      <div><label>PayPay</label><input id="nextPaypay" type="number" min="0" step="100" inputmode="numeric" placeholder="0"></div>
+    </div>
+  </div>
+  <div class="field"><label>お小遣い開始日</label><input id="startDay" type="number" min="1" max="28"></div>
+  <div class="field"><label>月末の残り</label><select id="carryover"><option value="carry">次月へ繰り越す</option><option value="save">貯金として残す</option><option value="reset">リセットする</option></select></div>
+  <div class="modalButtons"><button id="settingsCancel">キャンセル</button><button class="primary" id="settingsSave">保存</button></div>
+  <div class="resetArea"><div class="resetTitle">危険な操作</div><button class="resetButton" id="resetBtn">⚠️ データをリセット</button></div>
+</div></dialog>
+
+<dialog id="resetDialog"><div class="modal">
+  <h2>リセットしてもよろしいですか？</h2><p>支出・臨時収入・設定など、アプリ内の保存データを初期化します。</p>
+  <div class="modalButtons"><button id="resetCancel">キャンセル</button><button class="danger" id="resetConfirm">リセット</button></div>
+</div></dialog>
+
+<dialog id="amountDialog"><div class="modal">
+  <h2 id="amountTitle">支出</h2>
+  <div class="field"><label>金額</label><input id="amountInput" type="number" min="1" inputmode="numeric" placeholder="500"></div>
+  <div class="field">
+    <label>支払い方法</label>
+    <div class="methodGrid">
+      <button type="button" class="methodBtn active" id="amountWallet">財布</button>
+      <button type="button" class="methodBtn" id="amountPaypay">PayPay</button>
+    </div>
+  </div>
+  <div class="quick"><button data-quick="500">¥500</button><button data-quick="1000">¥1,000</button><button data-quick="3000">¥3,000</button></div>
+  <div class="modalButtons"><button id="amountCancel">キャンセル</button><button class="primary" id="amountOK">登録</button></div>
+</div></dialog>
+
+<dialog id="ocrDialog"><div class="modal">
+  <h2>レシート</h2>
+  <img id="receiptPreview" class="preview" alt="レシート画像">
+  <div class="ocrStatus" id="ocrStatus">レシートを読み取っています…</div>
+  <div class="field"><label>読み取った金額（修正できます）</label><input id="ocrAmount" type="number" min="1" inputmode="numeric"></div>
+  <div class="field">
+    <label>支払い方法</label>
+    <div class="methodGrid">
+      <button type="button" class="methodBtn active" id="ocrWallet">財布</button>
+      <button type="button" class="methodBtn" id="ocrPaypay">PayPay</button>
+    </div>
+  </div>
+  <div class="modalButtons"><button id="ocrCancel">キャンセル</button><button class="primary" id="ocrOK">支出として登録</button></div>
+</div></dialog>
+
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<script>
+const KEY="todayIkura_v17";
+const data=load();
+
+function load(){
+  const base={startDay:1,carryoverMode:"carry",allowanceByCycle:{},openingBalanceByCycle:{},openingWalletByCycle:{},openingPaypayByCycle:{},logs:[],dailyBudgetByDate:{}};
+  try{
+    const old=JSON.parse(localStorage.getItem(KEY)||"null");
+    const d=old?Object.assign(base,old):base;
+    d.allowanceByCycle=d.allowanceByCycle||{};
+    d.openingBalanceByCycle=d.openingBalanceByCycle||{};
+    d.openingWalletByCycle=d.openingWalletByCycle||{};
+    d.openingPaypayByCycle=d.openingPaypayByCycle||{};
+    d.logs=(d.logs||[]).map(x=>({...x,amount:Number(x.amount)||0,method:x.method||"wallet"}));
+    d.dailyBudgetByDate=d.dailyBudgetByDate||{};
+    return d;
+  }catch(e){return base}
+}
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function yen(n){return (n<0?"−":"")+"¥"+Math.abs(Math.floor(n)).toLocaleString("ja-JP")}
+function key(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+function startOfDay(d){return new Date(d.getFullYear(),d.getMonth(),d.getDate())}
+function cycleStart(d){
+  const day=Math.min(Math.max(1,Number(data.startDay)||1),28);
+  return d.getDate()>=day?new Date(d.getFullYear(),d.getMonth(),day):new Date(d.getFullYear(),d.getMonth()-1,day);
+}
+function cycleEnd(s){return new Date(s.getFullYear(),s.getMonth()+1,s.getDate())}
+function days(a,b){return Math.max(1,Math.round((b-a)/86400000))}
+function logsBetween(a,b){return data.logs.filter(x=>{const d=new Date(x.date);return d>=a&&d<b})}
+function sum(ls,type,method){
+  return ls.filter(x=>x.type===type&&(method?x.method===method:true)).reduce((n,x)=>n+x.amount,0)
+}
+function ensureWalletSplit(s){
+  const k=key(s);
+  if(Number.isFinite(data.openingWalletByCycle[k])||Number.isFinite(data.openingPaypayByCycle[k])) return;
+  if(Number.isFinite(data.openingBalanceByCycle[k])){
+    data.openingWalletByCycle[k]=data.openingBalanceByCycle[k];
+    data.openingPaypayByCycle[k]=0;
+  }
+}
+function cycleBalances(s){
+  ensureWalletSplit(s);
+  const k=key(s);
+  if(Number.isFinite(data.openingWalletByCycle[k])||Number.isFinite(data.openingPaypayByCycle[k])){
+    const ow=Number(data.openingWalletByCycle[k])||0, op=Number(data.openingPaypayByCycle[k])||0;
+    const ls=logsBetween(s,cycleEnd(s));
+    return {
+      wallet:ow+sum(ls,"income","wallet")-sum(ls,"expense","wallet"),
+      paypay:op+sum(ls,"income","paypay")-sum(ls,"expense","paypay")
+    };
+  }
+  const own=Number(data.allowanceByCycle[k]);
+  if(Number.isFinite(own)){
+    return {wallet:own,paypay:0};
+  }
+  return {wallet:25000,paypay:0};
+}
+function cycleAllowance(s){
+  const b=cycleBalances(s);
+  return b.wallet+b.paypay;
+}
+function nextCycle(s){return new Date(s.getFullYear(),s.getMonth()+1,s.getDate())}
+function nextAllowanceSplit(s){
+  const nk=key(nextCycle(s));
+  const total=Number(data.allowanceByCycle[nk]);
+  let w=Number(data.allowanceWalletByCycle?.[nk]), p=Number(data.allowancePaypayByCycle?.[nk]);
+  if(Number.isFinite(w)||Number.isFinite(p)) return {wallet:w||0,paypay:p||0};
+  return {wallet:Number.isFinite(total)?total:0,paypay:0};
+}
+
+function calc(){
+  const now=new Date(), cs=cycleStart(now), ce=cycleEnd(cs), all=logsBetween(cs,ce);
+  const bal=cycleBalances(cs), remain=bal.wallet+bal.paypay;
+  const spent=sum(all,"expense"), income=sum(all,"income");
+  const spentWallet=sum(all,"expense","wallet"), spentPaypay=sum(all,"expense","paypay");
+  const td=startOfDay(now), tomorrow=new Date(td.getTime()+86400000);
+  const tl=logsBetween(td,tomorrow), ts=sum(tl,"expense"), ti=sum(tl,"income");
+  const dk=key(now);
+  let daily=Number(data.dailyBudgetByDate[dk]);
+  if(!Number.isFinite(daily)){
+    daily=Math.floor(Math.max(0,remain)/days(td,ce));
+    data.dailyBudgetByDate[dk]=daily; save();
+  }
+  const todayRemain=daily-ts+ti;
+  const tomorrowDaily=Math.floor(Math.max(0,remain)/days(tomorrow,ce));
+
+  document.getElementById("todayDate").textContent=now.toLocaleDateString("ja-JP",{year:"numeric",month:"numeric",day:"numeric",weekday:"short"});
+  document.getElementById("today").textContent=yen(todayRemain);
+  document.getElementById("remain").textContent=yen(remain);
+  document.getElementById("spent").textContent=yen(spent);
+  document.getElementById("remainBreakdown").textContent="財布 "+yen(bal.wallet)+"　PayPay "+yen(bal.paypay);
+  document.getElementById("spentBreakdown").textContent="財布 "+yen(spentWallet)+"　PayPay "+yen(spentPaypay);
+  document.getElementById("tomorrow").textContent="明日は "+yen(tomorrowDaily)+" 使える予定";
+  document.getElementById("usedToday").textContent="今日すでに "+yen(ts)+" 使用";
+  const alert=document.getElementById("alert");
+  if(todayRemain<0){alert.style.display="block";alert.textContent="使いすぎです。明日以降は1日 "+yen(tomorrowDaily)+" になります。"}
+  else alert.style.display="none";
+
+  const na=nextAllowanceSplit(cs), notice=document.getElementById("notice");
+  if(na.wallet+na.paypay>0){
+    notice.style.display="block";
+    notice.textContent=(nextCycle(cs).getMonth()+1)+"月のお小遣い："+yen(na.wallet+na.paypay)+"（財布 "+yen(na.wallet)+" / PayPay "+yen(na.paypay)+"）";
+  }else notice.style.display="none";
+
+  document.getElementById("period").textContent="支給期間の残り "+days(td,ce)+"日";
+  renderHistory(tl);
+}
+
+function renderHistory(ls){
+  const el=document.getElementById("history");
+  if(!ls.length){el.innerHTML='<div class="empty">まだありません</div>';return}
+  el.innerHTML=ls.slice().sort((a,b)=>new Date(b.date)-new Date(a.date)).slice(0,3).map(x=>{
+    const sign=x.type==="income"?"+":"−", cls=x.type==="income"?"incomeRow":"expense";
+    const t=new Date(x.date).toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"});
+    const method=x.method==="paypay"?"PayPay":"財布";
+    return '<div class="row"><span>'+t+" "+esc(x.label)+"（"+method+"）</span><span class=\""+cls+"\">"+sign+" "+yen(x.amount)+'</span></div>';
+  }).join("");
+}
+function esc(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]))}
+function add(type,amount,label,method){
+  const n=Math.floor(Number(amount)); if(!Number.isFinite(n)||n<=0)return;
+  data.logs.push({type,amount:n,label:label||"支出",method:method||"wallet",date:new Date().toISOString()});
+  save();calc();
+}
+function setMethod(prefix,method){
+  document.getElementById(prefix+"Wallet").classList.toggle("active",method==="wallet");
+  document.getElementById(prefix+"Paypay").classList.toggle("active",method==="paypay");
+  window[prefix+"Method"]=method;
+}
+function openAmount(type){
+  window.amountType=type;
+  document.getElementById("amountTitle").textContent=type==="expense"?"支出":"臨時収入";
+  document.getElementById("amountInput").value="";
+  setMethod("amount","wallet");
+  document.getElementById("amountDialog").showModal();
+}
+function openSettings(){
+  const cs=cycleStart(new Date()), nk=key(nextCycle(cs));
+  const total=Number(data.allowanceByCycle[nk]);
+  const w=Number(data.allowanceWalletByCycle?.[nk]), p=Number(data.allowancePaypayByCycle?.[nk]);
+  document.getElementById("nextAllowanceTotal").value=Number.isFinite(total)?total:"";
+  document.getElementById("nextWallet").value=Number.isFinite(w)?w:(Number.isFinite(total)?total:"");
+  document.getElementById("nextPaypay").value=Number.isFinite(p)?p:0;
+  document.getElementById("startDay").value=data.startDay;
+  document.getElementById("carryover").value=data.carryoverMode;
+  updateNextPreview();
+  document.getElementById("settingsDialog").showModal();
+}
+function updateNextPreview(){
+  const w=Math.max(0,Number(document.getElementById("nextWallet").value)||0);
+  const p=Math.max(0,Number(document.getElementById("nextPaypay").value)||0);
+  document.getElementById("nextAllowanceTotal").value=w+p;
+  document.getElementById("nextAllowancePreview").textContent="財布 "+yen(w)+"　PayPay "+yen(p);
+}
+function saveSettings(){
+  const newStart=Number(document.getElementById("startDay").value);
+  if(!Number.isInteger(newStart)||newStart<1||newStart>28){alert("開始日は1〜28で入力してください。");return}
+  const w=Math.max(0,Number(document.getElementById("nextWallet").value)||0);
+  const p=Math.max(0,Number(document.getElementById("nextPaypay").value)||0);
+  data.startDay=newStart;
+  data.carryoverMode=document.getElementById("carryover").value;
+  data.allowanceByCycle=data.allowanceByCycle||{};
+  data.allowanceWalletByCycle=data.allowanceWalletByCycle||{};
+  data.allowancePaypayByCycle=data.allowancePaypayByCycle||{};
+  const cs=cycleStart(new Date()), nk=key(nextCycle(cs));
+  data.allowanceByCycle[nk]=w+p;
+  data.allowanceWalletByCycle[nk]=w;
+  data.allowancePaypayByCycle[nk]=p;
+  save();document.getElementById("settingsDialog").close();calc();
+}
+function resetAll(){
+  localStorage.removeItem(KEY);
+  data.startDay=1;data.carryoverMode="carry";
+  data.allowanceByCycle={};data.allowanceWalletByCycle={};data.allowancePaypayByCycle={};
+  data.openingBalanceByCycle={};data.openingWalletByCycle={};data.openingPaypayByCycle={};
+  data.logs=[];data.dailyBudgetByDate={};
+  const now=new Date(),cs=cycleStart(now);
+  data.openingWalletByCycle[key(cs)]=0;
+  data.openingPaypayByCycle[key(cs)]=0;
+  data.allowanceByCycle[key(nextCycle(cs))]=0;
+  data.allowanceWalletByCycle[key(nextCycle(cs))]=0;
+  data.allowancePaypayByCycle[key(nextCycle(cs))]=0;
+  save();document.getElementById("resetDialog").close();document.getElementById("settingsDialog").close();calc();
+}
+
+document.getElementById("settingsBtn").onclick=openSettings;
+document.getElementById("settingsCancel").onclick=()=>document.getElementById("settingsDialog").close();
+document.getElementById("settingsSave").onclick=saveSettings;
+document.getElementById("resetBtn").onclick=()=>document.getElementById("resetDialog").showModal();
+document.getElementById("resetCancel").onclick=()=>document.getElementById("resetDialog").close();
+document.getElementById("resetConfirm").onclick=resetAll;
+document.getElementById("expenseBtn").onclick=()=>openAmount("expense");
+document.getElementById("incomeBtn").onclick=()=>openAmount("income");
+document.getElementById("amountWallet").onclick=()=>setMethod("amount","wallet");
+document.getElementById("amountPaypay").onclick=()=>setMethod("amount","paypay");
+document.getElementById("ocrWallet").onclick=()=>setMethod("ocr","wallet");
+document.getElementById("ocrPaypay").onclick=()=>setMethod("ocr","paypay");
+document.querySelectorAll("[data-quick]").forEach(b=>b.onclick=()=>document.getElementById("amountInput").value=b.dataset.quick);
+document.getElementById("amountCancel").onclick=()=>document.getElementById("amountDialog").close();
+document.getElementById("amountOK").onclick=()=>{
+  const n=Number(document.getElementById("amountInput").value);
+  if(n>0){add(window.amountType,n,window.amountType==="income"?"臨時収入":"支出",window.amountMethod||"wallet");document.getElementById("amountDialog").close()}
+};
+
+document.getElementById("nextWallet").addEventListener("input",updateNextPreview);
+document.getElementById("nextPaypay").addEventListener("input",updateNextPreview);
+document.getElementById("nextAllowanceTotal").addEventListener("input",()=>{
+  const total=Math.max(0,Number(document.getElementById("nextAllowanceTotal").value)||0);
+  document.getElementById("nextWallet").value=total;
+  document.getElementById("nextPaypay").value=0;
+  updateNextPreview();
+});
+
+document.getElementById("receiptFile").addEventListener("change",async function(){
+  const file=this.files&&this.files[0]; if(!file)return;
+  const url=URL.createObjectURL(file), preview=document.getElementById("receiptPreview");
+  preview.src=url;preview.style.display="block";
+  setMethod("ocr","wallet");
+  document.getElementById("ocrDialog").showModal();
+  const status=document.getElementById("ocrStatus"), amount=document.getElementById("ocrAmount");
+  status.textContent="レシートを読み取っています…"; amount.value="";
+  try{
+    if(!window.Tesseract)throw new Error("OCR library unavailable");
+    const result=await Tesseract.recognize(file,"jpn+eng",{logger:m=>{if(m.status==="recognizing text")status.textContent="文字を読み取り中… "+Math.round((m.progress||0)*100)+"%"}});
+    const text=result.data.text.replace(/,/g,"");
+    const nums=[...text.matchAll(/(?:¥|￥)?\s*(\d{2,7})\s*円?/g)].map(m=>Number(m[1])).filter(n=>n>=10&&n<=9999999);
+    const total=nums.length?Math.max(...nums):0;
+    amount.value=total||"";
+    status.textContent=total?"読み取りました。金額を確認・修正してから登録してください。":"金額を自動判定できませんでした。金額を入力してください。";
+  }catch(e){status.textContent="読み取りに失敗しました。金額を入力してください。";}
+});
+document.getElementById("ocrCancel").onclick=()=>{document.getElementById("ocrDialog").close();document.getElementById("receiptFile").value=""};
+document.getElementById("ocrOK").onclick=()=>{
+  const n=Number(document.getElementById("ocrAmount").value);
+  if(n>0){add("expense",n,"レシート",window.ocrMethod||"wallet");document.getElementById("ocrDialog").close();document.getElementById("receiptFile").value=""}
+};
+
+(function migrateAndSeed(){
+  const now=new Date(),cs=cycleStart(now),ce=cycleEnd(cs),ck=key(cs),nk=key(nextCycle(cs));
+  data.allowanceWalletByCycle=data.allowanceWalletByCycle||{};
+  data.allowancePaypayByCycle=data.allowancePaypayByCycle||{};
+  ensureWalletSplit(cs);
+  // Existing v20 data: if no split has ever been set, preserve the existing total in 財布.
+  if(!Number.isFinite(data.openingWalletByCycle[ck]) && !Number.isFinite(data.openingPaypayByCycle[ck])){
+    data.openingWalletByCycle[ck]=0; data.openingPaypayByCycle[ck]=0;
+  }
+  if(!Number.isFinite(data.allowanceByCycle[nk])){
+    data.allowanceByCycle[nk]=0; data.allowanceWalletByCycle[nk]=0; data.allowancePaypayByCycle[nk]=0;
+  }
+  save();
+})();
+calc();
+</script>
+</body>
+</html>
